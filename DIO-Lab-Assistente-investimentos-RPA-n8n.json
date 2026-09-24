@@ -1,0 +1,140 @@
+{
+  "name": "DIO-Lab-Assistente-investimentos-RPA-n8n",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "Clientes",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ba3df3dc-87c1-42f2-acd1-0aa3bf3c119b",
+      "name": "Webhook",
+      "webhookId": "844fb5f0-a2ef-49bd-8de3-6e108affb3f3"
+    },
+    {
+      "parameters": {
+        "url": "https://digitalinnovationone.github.io/dio-lab-assistente-investimentos-rpa-n8n/data.csv",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        240
+      ],
+      "id": "0f4f810a-e467-44dd-9a4a-29a1ced9ae52",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pega o CSV como texto vindo do HTTP Request\nconst csvRaw = $json.data ?? $json.body ?? $json;\n\nconst text = (typeof csvRaw === \"string\") ? csvRaw : JSON.stringify(csvRaw);\n\nconst lines = text.split(/\\r?\\n/).map(l => l.trim()).filter(Boolean);\n\nconst headers = lines[0].split(\",\").map(h => h.trim());\n\nconst investimentos = lines.slice(1).map(line => {\n  const cols = line.split(\",\").map(c => c.trim());\n  const obj = {};\n  headers.forEach((h, i) => obj[h] = cols[i] ?? \"\");\n\n  // normaliza mínimo para número\n  obj.minimo = Number(String(obj.minimo).replace(/[^\\d]/g, \"\")) || 0;\n\n  return obj;\n});\n\nreturn [{ json: { investimentos } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        240
+      ],
+      "id": "5df9cbb6-7cca-4fbb-bb92-19f0ea030266",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        608,
+        16
+      ],
+      "id": "a448abf9-d9e9-4f02-984d-28ec797b9751",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n > nó Code > Language: JavaScript > Mode: Run Once for All Items\n// Gera uma mensagem personalizada para cada cliente com base no perfil e no saldo.\n\nconst dados = $input.first().json;\n\nconst clientes = dados.body?.clientes ?? [];\nconst investimentos = dados.investimentos ?? [];\n\n// \"R$ 12.500,00\" -> 12500\nfunction saldoParaNumero(texto) {\n  const limpo = String(texto)\n    .replace(/[^\\d,]/g, \"\")   // remove \"R$\", espaços e pontos de milhar\n    .replace(\",\", \".\");       // vírgula decimal -> ponto\n  return Number(limpo) || 0;\n}\n\n// 12500 -> \"R$ 12.500,00\"\nfunction formatarMoeda(valor) {\n  return valor.toLocaleString(\"pt-BR\", { style: \"currency\", currency: \"BRL\" });\n}\n\nconst resultado = clientes.map(cliente => {\n  const saldo = saldoParaNumero(cliente.saldo);\n  const primeiroNome = cliente.nome.split(\" \")[0];\n\n  // Produtos do mesmo perfil que o cliente consegue contratar com o saldo atual\n  const opcoes = investimentos.filter(\n    inv => inv.perfil === cliente.perfil && Number(inv.minimo) <= saldo\n  );\n\n  let mensagem = `Olá, ${primeiroNome}! 👋\\n\\n`;\n  mensagem += `Com base no seu perfil ${cliente.perfil} e no seu saldo de ${formatarMoeda(saldo)}, `;\n\n  if (opcoes.length > 0) {\n    mensagem += `separamos estas opções de investimento para você:\\n\\n`;\n    opcoes.forEach(inv => {\n      mensagem += `• ${inv.produto} — rentabilidade: ${inv.rentabilidade} (mínimo: ${formatarMoeda(Number(inv.minimo))})\\n`;\n    });\n  } else {\n    mensagem += `ainda não encontramos produtos disponíveis para o seu perfil com esse valor. `;\n    mensagem += `Que tal conversar com um de nossos especialistas?\\n`;\n  }\n\n  mensagem += `\\nFicamos à disposição para ajudar você a investir melhor. 🚀`;\n\n  return {\n    json: {\n      nome: cliente.nome,\n      email: cliente.email,\n      perfil: cliente.perfil,\n      saldo,\n      assunto: `${primeiroNome}, temos sugestões de investimento para você`,\n      mensagem,\n    },\n  };\n});\n\n// Um item por cliente: o próximo nó (Gmail, WhatsApp, Loop etc.) roda uma vez para cada um\nreturn resultado;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        16
+      ],
+      "id": "a0e1ed32-783c-40a8-a59e-a0cd68ddf4ee",
+      "name": "Code in JavaScript1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "71847ebc-7204-406d-a43c-db74e6c64f35",
+  "meta": {
+    "instanceId": "aba0e6894353f39e7e2d0695576cae12d9b05099dd03356807d499b51219c871"
+  },
+  "nodeGroups": [],
+  "id": "XVXZLIH7TkNk7lHH",
+  "tags": []
+}
